@@ -31,14 +31,44 @@ import java.util.concurrent.TimeUnit;
 @Measurement(iterations = 10, time = 1, timeUnit = TimeUnit.SECONDS)
 public class ByteBufUtilDecodeStringBenchmark extends AbstractMicrobenchmark {
 
-    @Param({ "8", "64" })
+    public enum ByteBufType {
+        DIRECT {
+            @Override
+            ByteBuf newBuffer(byte[] bytes,  int offset, int length) {
+                ByteBuf buffer = Unpooled.directBuffer(length);
+                buffer.writeBytes(bytes, offset, length);
+                return buffer;
+            }
+        },
+        HEAP {
+            @Override
+            ByteBuf newBuffer(byte[] bytes, int offset, int length) {
+                return Unpooled.wrappedBuffer(bytes, offset, length);
+            }
+        },
+        COMPOSITE {
+            @Override
+            ByteBuf newBuffer(byte[] bytes, int offset, int length) {
+                CompositeByteBuf buffer = Unpooled.compositeBuffer();
+                while (length > 0) {
+                    buffer.addComponent(true, Unpooled.wrappedBuffer(bytes, offset, Math.min(8, length)));
+                    length -= 8;
+                    offset += 8;
+                }
+                return buffer;
+            }
+        };
+        abstract ByteBuf newBuffer(byte[] bytes, int offset, int length);
+    }
+
+    @Param({ "8", "64", "1024", "10240" })
     public int size;
 
-    @Param({ "US-ASCII", "UTF-16", "ISO-8859-1" })
+    @Param({ "US-ASCII", "UTF-8", "UTF-16", "ISO-8859-1" })
     public String charsetName;
 
-    @Param({ "false", "true" })
-    public boolean direct;
+    @Param
+    public ByteBufType bufferType;
 
     private ByteBuf buffer;
     private Charset charset;
@@ -46,7 +76,7 @@ public class ByteBufUtilDecodeStringBenchmark extends AbstractMicrobenchmark {
     @Override
     protected String[] jvmArgs() {
         // Ensure we minimize the GC overhead by sizing the heap big enough.
-        return new String[] { "-Xmx8g", "-Xms8g", "-Xmn6g" };
+        return new String[] { "-XX:MaxDirectMemorySize=2g", "-Xmx8g", "-Xms8g", "-Xmn6g" };
     }
 
     @Setup
@@ -54,14 +84,8 @@ public class ByteBufUtilDecodeStringBenchmark extends AbstractMicrobenchmark {
         byte[] bytes = new byte[size + 2];
         Arrays.fill(bytes, (byte) 'a');
 
-        if (direct) {
-            buffer = Unpooled.directBuffer(size);
-            buffer.writeBytes(bytes, 0, size);
-        } else {
-            // Ensure we have some offset in the backing byte array.
-            buffer = Unpooled.wrappedBuffer(bytes, 1, size);
-        }
-
+        // Use an offset to not allow any optimizations because we use the exact passed in byte[] for heap buffers.
+        buffer = bufferType.newBuffer(bytes, 1, size);
         charset = Charset.forName(charsetName);
     }
 
@@ -73,5 +97,10 @@ public class ByteBufUtilDecodeStringBenchmark extends AbstractMicrobenchmark {
     @Benchmark
     public String decodeString() {
         return ByteBufUtil.decodeString(buffer, buffer.readerIndex(), size, charset);
+    }
+
+    @Benchmark
+    public String decodeStringOld() {
+        return ByteBufUtil.decodeStringOld(buffer, buffer.readerIndex(), size, charset);
     }
 }
