@@ -810,22 +810,31 @@ public final class ByteBufUtil {
         }
     }
 
+    @SuppressWarnings("deprecation")
     static String decodeString(ByteBuf src, int readerIndex, int len, Charset charset) {
         if (len == 0) {
             return StringUtil.EMPTY_STRING;
         }
+        final byte[] array;
+        final int offset;
+
         if (src.hasArray()) {
-            return new String(src.array(), src.arrayOffset() + readerIndex, len, charset);
+            array = src.array();
+            offset = src.arrayOffset() + readerIndex;
         } else {
-            final byte[] bytes;
             if (len <= 1024) {
-                bytes = BYTE_ARRAYS.get();
+                array = BYTE_ARRAYS.get();
             } else {
-                bytes = PlatformDependent.allocateUninitializedArray(len);
+                array = PlatformDependent.allocateUninitializedArray(len);
             }
-            src.getBytes(readerIndex, bytes, 0, len);
-            return new String(bytes, 0, len, charset);
+            offset = 0;
+            src.getBytes(readerIndex, array, 0, len);
         }
+        if (CharsetUtil.US_ASCII.equals(charset)) {
+            // Fast-path for US-ASCII which is used frequently.
+            return new String(array, 0, offset, len);
+        }
+        return new String(array, offset, len, charset);
     }
 
     /**
