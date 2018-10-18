@@ -35,12 +35,11 @@ import java.security.cert.X509Certificate;
 import java.util.List;
 
 /**
- * Provide a way to use {@code TLSv1.3} with Java versions prior to Java11 by adding a
+ * Provide a way to use {@code TLSv1.3} with Java versions prior to 11 by adding a
  * <a href="http://mail.openjdk.java.net/pipermail/security-dev/2018-September/018242.html>workaround</a> for the
  * default {@link X509ExtendedTrustManager} implementations provided by the JDK that can not handle a protocol version
  * of {@code TLSv1.3}.
  */
-//
 final class OpenSslTlsv13X509ExtendedTrustManager extends X509ExtendedTrustManager {
 
     private final X509ExtendedTrustManager tm;
